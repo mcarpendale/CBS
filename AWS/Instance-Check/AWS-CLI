@@ -10,6 +10,8 @@ for region in ap-south-1 ap-south-2 ap-northeast-1 ap-northeast-2 ap-northeast-3
         available=$(aws ec2 describe-instance-type-offerings --filters Name=instance-type,Values=$instance_type --query "InstanceTypeOfferings[].InstanceType" --region $region)
         if [[ $available != "[]" ]]; then
             echo "    v20 $role Instance available \"$instance_type\""
+        else
+            echo "    **PROBLEM: v20 $role Instance \"$instance_type\" NOT available in $region**"
         fi
     done
     echo "for V10 Instances"
@@ -22,6 +24,8 @@ for region in ap-south-1 ap-south-2 ap-northeast-1 ap-northeast-2 ap-northeast-3
         available=$(aws ec2 describe-instance-type-offerings --filters Name=instance-type,Values=$instance_type --query "InstanceTypeOfferings[].InstanceType" --region $region)
         if [[ $available != "[]" ]]; then
             echo "    v10 $role Instance available \"$instance_type\""
+        else
+            echo "    **PROBLEM: v10 $role Instance \"$instance_type\" NOT available in $region**"
         fi
     done
     echo ""
