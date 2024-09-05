@@ -1,0 +1,28 @@
+for region in ap-south-1 ap-south-2 ap-northeast-1 ap-northeast-2 ap-northeast-3 ap-southeast-1 ap-southeast-2 ap-southeast-3 ap-southeast-4 ap-southeast-5 ap-east-1; do
+    echo "Searching in $region..."
+    echo "for V20 Instances"
+    for instance_type in c5n.18xlarge i3en.3xlarge; do
+        if [[ $instance_type == "c5n.18xlarge" ]]; then
+            role="Controller"
+        else
+            role="Virtual Drive"
+        fi
+        available=$(aws ec2 describe-instance-type-offerings --filters Name=instance-type,Values=$instance_type --query "InstanceTypeOfferings[].InstanceType" --region $region)
+        if [[ $available != "[]" ]]; then
+            echo "    v20 $role Instance available \"$instance_type\""
+        fi
+    done
+    echo "for V10 Instances"
+    for instance_type in c5n.9xlarge i3.2xlarge; do
+        if [[ $instance_type == "c5n.9xlarge" ]]; then
+            role="Controller"
+        else
+            role="Virtual Drive"
+        fi
+        available=$(aws ec2 describe-instance-type-offerings --filters Name=instance-type,Values=$instance_type --query "InstanceTypeOfferings[].InstanceType" --region $region)
+        if [[ $available != "[]" ]]; then
+            echo "    v10 $role Instance available \"$instance_type\""
+        fi
+    done
+    echo ""
+done
