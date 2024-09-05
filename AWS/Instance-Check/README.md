@@ -35,8 +35,6 @@ To run the script, simply copy the following code into your terminal or save it 
 ### Example Command
 
 ```bash
-#!/bin/bash
-
 for region in ap-south-1 ap-south-2 ap-northeast-1 ap-northeast-2 ap-northeast-3 ap-southeast-1 ap-southeast-2 ap-southeast-3 ap-southeast-4 ap-southeast-5 ap-east-1; do
     echo "Searching in $region..."
     echo "for V20 Instances"
