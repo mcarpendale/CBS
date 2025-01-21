@@ -41,3 +41,25 @@ Calculate the actual storage consumption of EBS snapshots (FULL & INCR), optiona
    ```bash
    python3 ./GetSnapshot-Detailed.py --region ap-southeast-1 \
     --role MyCrossAccountRole --file org_snapshots.csv
+
+## Requirements
+
+- **Python 3.x**  
+  This script uses built-in Python modules such as `argparse`, `csv`, `logging`, `datetime`, `os`, and `json`.  
+  These are included by default in Python’s standard library.
+
+- **boto3**  
+  This is a third-party library for AWS APIs. If boto3 isn’t already installed, you must install it before running the script.
+
+### Installation
+
+1. **Install Python 3** (if not already installed). I used Amazon Linux**:
+   ```bash
+   sudo yum update -y
+   sudo yum install python3 -y
+2. **Install boto3 using pip**:
+   ```bash
+   python3 -m pip install boto3
+3. **Or install the OS package directly (on Amazon Linux)**:
+   ```bash
+   sudo yum install -y python3-boto3
