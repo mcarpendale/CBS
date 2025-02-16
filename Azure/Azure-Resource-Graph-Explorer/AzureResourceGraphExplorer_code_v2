@@ -1,0 +1,42 @@
+resources
+| where type =~ 'microsoft.compute/disks'
+| join kind=leftouter (
+    resourcecontainers
+    | where type =~ 'microsoft.resources/subscriptions'
+    | project subscriptionName = name, subscriptionId
+) on subscriptionId
+| extend azureRegion = location
+| extend azureZone = strcat_array(zones, '"')
+| extend resourceId = tolower(tostring(id))
+| extend resourceName = name
+| extend diskType = sku.name
+| extend osDisk = properties.osType
+| extend diskSize = tostring(properties.diskSizeGB)
+| extend diskState = tostring(properties.diskState)
+| extend diskBW = tostring(properties.diskMBpsReadWrite)
+| extend diskIOPS = tostring(properties.diskIOPSReadWrite)
+| extend createdDateTime = properties.timeCreated
+| where isnull(properties.osType)
+| project azureRegion, azureZone, subscriptionName, resourceGroup, resourceId, resourceName, diskType, osDisk, diskSize, diskBW, diskIOPS, diskState, managedBy, createdDateTime
+| join kind=inner (
+    resources
+    | where type =~ 'microsoft.compute/virtualmachines'
+    | extend vmName = name, vmId = id
+    | project vmName, vmId, resourceGroup
+) on $left.resourceGroup == $right.resourceGroup
+| join kind=inner (
+    resources
+    | where type =~ 'microsoft.network/networkinterfaces'
+    | extend vnicName = name, 
+           vnicId = id, 
+           vnicRg = resourceGroup, 
+           subnetId = iff(array_length(properties.ipConfigurations) > 0, 
+                          tostring(properties.ipConfigurations[0].properties.subnet.id), 
+                          "")
+    | extend vnetName = iff(subnetId != "", 
+                          extract("/virtualNetworks/([^/]+)", 1, subnetId), 
+                          "")
+    | extend virtualMachineId = tostring(properties.virtualMachine.id)
+    | project vnicName, vnicId, vnicRg, vnetName, virtualMachineId
+) on $left.vmId == $right.virtualMachineId
+| project azureRegion, azureZone, subscriptionName, resourceGroup, resourceId, resourceName, diskType, osDisk, diskSize, diskBW, diskIOPS, diskState, managedBy, createdDateTime, vmName, vnicName, vnetName
