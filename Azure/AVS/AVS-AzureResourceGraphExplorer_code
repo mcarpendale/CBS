@@ -1,0 +1,10 @@
+Resources
+| where type == "microsoft.avs/privateclouds"
+| extend availabilityZone = tostring(properties.availability.zone)
+| extend managementCluster = properties.managementCluster
+| extend clusterName = tostring(managementCluster.displayName),
+         clusterId = tostring(managementCluster.clusterId),
+         clusterSize = tostring(managementCluster.clusterSize),
+         hostNames = managementCluster.hosts
+| extend hostNamesList = strcat_array(hostNames, ", ")
+| project subscriptionId, resourceGroup, name, location, properties.provisioningState, skuName = tostring(sku.name), availabilityZone, clusterName, clusterId, clusterSize, hostNamesList
