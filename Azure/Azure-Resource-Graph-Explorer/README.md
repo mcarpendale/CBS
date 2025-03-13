@@ -18,6 +18,6 @@ Download as a CVS after the query has executed
 [Snapshots](https://github.com/mcarpendale/CBS/blob/main/Azure/Azure-Resource-Graph-Explorer/AzureResourceGraphExplorer_snaps)
 This code used in Azure Resource Graph Explorer to collect `snapshot` information from the VM Managed Data disks
 
-[Picture]
+![image](https://github.com/user-attachments/assets/01821e6d-4004-4f86-b1f1-49c65a602939)
 
 Download as a CVS after the query has executed
