@@ -1,0 +1,104 @@
+//======================================================================
+// VM Disk Performance & Capacity Report
+// Scope: All subscriptions selected in the Log Analytics workspace
+// Shows correlated performance metrics at the moment of peak read
+// and peak write throughput for each drive on each VM
+//
+// COLUMNS:
+// PW_ prefix  = correlated value at peak WRITE time
+// PR_ prefix  = correlated value at peak READ time
+// Null values = metric sample didn't align at that exact timestamp
+//======================================================================
+let baseData = InsightsMetrics   // All perf metrics, filtered to real drives
+| where Namespace == "LogicalDisk" and Name in ("ReadBytesPerSecond", "WriteBytesPerSecond", "ReadsPerSecond", "WritesPerSecond", "ReadLatencyMs", "WriteLatencyMs")
+| extend DiskDetails = parse_json(Tags)
+| extend Drive = tostring(DiskDetails["vm.azm.ms/mountId"])
+| where Drive !in ("", "/mnt", "/mnt/resource")
+| where Drive !startswith "/snap/"
+| where Drive !startswith "/boot"
+| where Drive !startswith "/sys/";
+let driveInfo = InsightsMetrics   // Capacity data (size, used, free, pct used)
+| where Namespace == "LogicalDisk" and Name == "FreeSpaceMB"
+| extend DiskDetails = parse_json(Tags)
+| extend Drive = tostring(DiskDetails["vm.azm.ms/mountId"])
+| extend DiskSizeMB = todecimal(DiskDetails["vm.azm.ms/diskSizeMB"])
+| where Drive !in ("", "/mnt", "/mnt/resource")
+| where Drive !startswith "/snap/"
+| where Drive !startswith "/boot"
+| where Drive !startswith "/sys/"
+| summarize FreeSpaceMB = avg(Val), DiskSizeMB = max(DiskSizeMB) by Computer, Drive, _ResourceId
+| extend UsedSpaceMB = DiskSizeMB - FreeSpaceMB
+| extend FreeSpaceGB = round(FreeSpaceMB / 1024, 2)
+| extend UsedSpaceGB = round(UsedSpaceMB / 1024, 2)
+| extend DiskSizeGB = round(DiskSizeMB / 1024, 2)
+| extend PctUsed = round((UsedSpaceMB / DiskSizeMB) * 100, 1);
+let peakWrite = baseData   // Timestamp and value of max write throughput
+| where Name == "WriteBytesPerSecond"
+| summarize arg_max(Val, TimeGenerated) by Computer, Drive, _ResourceId
+| project Computer, Drive, _ResourceId, PeakWriteTime = TimeGenerated, MaxWriteMBps = round(Val / 1048576, 2);
+let peakRead = baseData   // Timestamp and value of max read throughput
+| where Name == "ReadBytesPerSecond"
+| summarize arg_max(Val, TimeGenerated) by Computer, Drive, _ResourceId
+| project Computer, Drive, _ResourceId, PeakReadTime = TimeGenerated, MaxReadMBps = round(Val / 1048576, 2);
+let allMetrics = baseData   // Flattened lookup table for timestamp correlation
+| extend MBps = round(Val / 1048576, 2)
+| extend RawVal = Val
+| project Computer, Drive, _ResourceId, TimeGenerated, Name, MBps, RawVal;
+peakWrite   // Assembly: join all blocks and correlate metrics at peak times
+| join kind=leftouter peakRead on Computer, Drive, _ResourceId
+| join kind=leftouter driveInfo on Computer, Drive, _ResourceId
+| extend SubscriptionId = tostring(split(_ResourceId, "/")[2])
+| extend ResourceGroup = tostring(split(_ResourceId, "/")[4])
+| extend DriveType = case(
+    Drive == "/" or Drive == "C:", "OS",
+    Drive == "D:" and DiskSizeGB <= 16, "Temp",
+    "Data"
+)
+// Correlated metrics at PEAK WRITE time (PW_ prefix)
+| join kind=leftouter (
+    allMetrics | where Name == "ReadBytesPerSecond"
+    | project Computer, Drive, _ResourceId, TimeGenerated, PW_ReadMBps = MBps
+) on Computer, Drive, _ResourceId, $left.PeakWriteTime == $right.TimeGenerated
+| join kind=leftouter (
+    allMetrics | where Name == "ReadsPerSecond"
+    | project Computer, Drive, _ResourceId, TimeGenerated, PW_ReadIOPS = round(RawVal, 0)
+) on Computer, Drive, _ResourceId, $left.PeakWriteTime == $right.TimeGenerated
+| join kind=leftouter (
+    allMetrics | where Name == "WritesPerSecond"
+    | project Computer, Drive, _ResourceId, TimeGenerated, PW_WriteIOPS = round(RawVal, 0)
+) on Computer, Drive, _ResourceId, $left.PeakWriteTime == $right.TimeGenerated
+| join kind=leftouter (
+    allMetrics | where Name == "ReadLatencyMs"
+    | project Computer, Drive, _ResourceId, TimeGenerated, PW_ReadLatMs = round(RawVal, 2)
+) on Computer, Drive, _ResourceId, $left.PeakWriteTime == $right.TimeGenerated
+| join kind=leftouter (
+    allMetrics | where Name == "WriteLatencyMs"
+    | project Computer, Drive, _ResourceId, TimeGenerated, PW_WriteLatMs = round(RawVal, 2)
+) on Computer, Drive, _ResourceId, $left.PeakWriteTime == $right.TimeGenerated
+// Correlated metrics at PEAK READ time (PR_ prefix)
+| join kind=leftouter (
+    allMetrics | where Name == "WriteBytesPerSecond"
+    | project Computer, Drive, _ResourceId, TimeGenerated, PR_WriteMBps = MBps
+) on Computer, Drive, _ResourceId, $left.PeakReadTime == $right.TimeGenerated
+| join kind=leftouter (
+    allMetrics | where Name == "ReadsPerSecond"
+    | project Computer, Drive, _ResourceId, TimeGenerated, PR_ReadIOPS = round(RawVal, 0)
+) on Computer, Drive, _ResourceId, $left.PeakReadTime == $right.TimeGenerated
+| join kind=leftouter (
+    allMetrics | where Name == "WritesPerSecond"
+    | project Computer, Drive, _ResourceId, TimeGenerated, PR_WriteIOPS = round(RawVal, 0)
+) on Computer, Drive, _ResourceId, $left.PeakReadTime == $right.TimeGenerated
+| join kind=leftouter (
+    allMetrics | where Name == "ReadLatencyMs"
+    | project Computer, Drive, _ResourceId, TimeGenerated, PR_ReadLatMs = round(RawVal, 2)
+) on Computer, Drive, _ResourceId, $left.PeakReadTime == $right.TimeGenerated
+| join kind=leftouter (
+    allMetrics | where Name == "WriteLatencyMs"
+    | project Computer, Drive, _ResourceId, TimeGenerated, PR_WriteLatMs = round(RawVal, 2)
+) on Computer, Drive, _ResourceId, $left.PeakReadTime == $right.TimeGenerated
+// Output: Identity > Capacity > Peak Write snapshot > Peak Read snapshot
+| project SubscriptionId, ResourceGroup, Computer, Drive, DriveType, DiskSizeGB, UsedSpaceGB, FreeSpaceGB, PctUsed,
+    PeakWriteTime, MaxWriteMBps, PW_ReadMBps, PW_WriteIOPS, PW_ReadIOPS, PW_WriteLatMs, PW_ReadLatMs,
+    PeakReadTime, MaxReadMBps, PR_WriteMBps, PR_ReadIOPS, PR_WriteIOPS, PR_ReadLatMs, PR_WriteLatMs,
+    _ResourceId
+| order by SubscriptionId asc, Computer asc, Drive asc
